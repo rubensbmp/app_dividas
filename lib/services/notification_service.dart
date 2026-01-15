@@ -3,6 +3,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 
 class NotificationService {
+  // Singleton pattern
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
@@ -10,51 +11,49 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
+    // Inicializa Timezone (necessário para agendamento)
     tz.initializeTimeZones();
 
+    // Configuração Android (Ícone padrão do sistema)
+    // Certifique-se de ter um ícone chamado 'app_icon' ou use '@mipmap/ic_launcher'
     const AndroidInitializationSettings initializationSettingsAndroid =
     AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    final InitializationSettings initializationSettings = InitializationSettings(
+    // Configuração iOS (Permissões básicas)
+    const DarwinInitializationSettings initializationSettingsDarwin =
+    DarwinInitializationSettings(
+      requestSoundPermission: true,
+      requestBadgePermission: true,
+      requestAlertPermission: true,
+    );
+
+    const InitializationSettings initializationSettings = InitializationSettings(
       android: initializationSettingsAndroid,
+      iOS: initializationSettingsDarwin,
     );
 
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 
-  Future<void> agendarNotificacao({
-    required int id,
-    required String nome,
-    required double valor,
-    required DateTime dataVencimento,
-  }) async {
-
-    // Configura para 9 da manhã do dia
-    final scheduledDate = DateTime(
-      dataVencimento.year,
-      dataVencimento.month,
-      dataVencimento.day,
-      9, 0, 0,
+  // Função para exibir notificação instantânea
+  Future<void> showNotification({required int id, required String title, required String body}) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+    AndroidNotificationDetails(
+      'lembrete_backup_id', // ID do canal
+      'Lembretes de Backup', // Nome do canal
+      channelDescription: 'Canal para avisar sobre backups pendentes',
+      importance: Importance.max,
+      priority: Priority.high,
     );
 
-    // Se a data já passou (ex: salvou hoje para cobrar ontem), não agenda
-    if (scheduledDate.isBefore(DateTime.now())) return;
+    const NotificationDetails platformChannelSpecifics =
+    NotificationDetails(android: androidPlatformChannelSpecifics);
 
-    await flutterLocalNotificationsPlugin.zonedSchedule(
+    await flutterLocalNotificationsPlugin.show(
       id,
-      'Cobrança: $nome',
-      'Vencimento hoje. Valor: R\$ ${valor.toStringAsFixed(2)}',
-      tz.TZDateTime.from(scheduledDate, tz.local),
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'lembretes_cobranca',
-          'Lembretes de Cobrança',
-          importance: Importance.max,
-          priority: Priority.high,
-        ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      title,
+      body,
+      platformChannelSpecifics,
     );
   }
 }

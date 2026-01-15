@@ -4,77 +4,93 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 import '../database/db_helper.dart';
 
 class BackupService {
 
-  // Função para EXPORTAR (Salvar)
+  static const String KEY_ULTIMO_BACKUP = 'data_ultimo_backup';
+  // IMPORTANTE: Nome interno do arquivo no celular (não muda para não perder dados)
+  static const String NOME_INTERNO = 'faca_bainha_v3.db';
+
+  // Verifica se já passaram 7 dias desde o último backup
+  Future<bool> precisaFazerBackup() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? dataStr = prefs.getString(KEY_ULTIMO_BACKUP);
+
+    if (dataStr == null) return true; // Nunca fez
+
+    DateTime ultimoBackup = DateTime.parse(dataStr);
+    DateTime agora = DateTime.now();
+    int diasPassados = agora.difference(ultimoBackup).inDays;
+
+    return diasPassados >= 7;
+  }
+
+  // Marca que o backup foi feito agora
+  Future<void> _atualizarDataBackup() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(KEY_ULTIMO_BACKUP, DateTime.now().toIso8601String());
+  }
+
+  // --- EXPORTAR (Envia para WhatsApp/Drive) ---
   Future<void> exportarBanco(BuildContext context) async {
     try {
-      // 1. Acha onde o banco de dados está escondido
-      String dbPath = join(await getDatabasesPath(), 'app_dividas_v3.db');
-      File dbFile = File(dbPath);
+      var databasesPath = await getDatabasesPath();
 
-      if (!await dbFile.exists()) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Nenhum dado para salvar ainda.")));
-        return;
+      // Cria o nome amigável com a data de hoje: ex: controle_de_dividas_14-01-2026.db
+      String dataHoje = DateFormat('dd-MM-yyyy').format(DateTime.now());
+      String nomeExterno = 'controle_de_dividas_$dataHoje.db';
+
+      String pathOriginal = join(databasesPath, NOME_INTERNO);
+      String pathExportacao = join(databasesPath, nomeExterno);
+
+      File dbFile = File(pathOriginal);
+
+      if (await dbFile.exists()) {
+        // Faz uma cópia temporária com o nome bonito
+        await dbFile.copy(pathExportacao);
+
+        // Abre o compartilhamento nativo
+        await Share.shareXFiles(
+            [XFile(pathExportacao)],
+            text: 'Backup Controle de Dívidas ($dataHoje)'
+        );
+
+        await _atualizarDataBackup(); // Reseta o contador de 7 dias
+
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Nenhum banco de dados encontrado.")));
       }
-
-      // 2. Cria uma cópia temporária com nome bonito (ex: backup_dividas_data.db)
-      final directory = await getTemporaryDirectory();
-      final date = DateTime.now().toString().split(' ')[0]; // Pega só a data (2023-10-25)
-      String newPath = '${directory.path}/backup_dividas_$date.db';
-
-      await dbFile.copy(newPath);
-
-      // 3. Abre a janelinha de compartilhar (WhatsApp, Drive, Email...)
-      await Share.shareXFiles([XFile(newPath)], text: 'Backup App Dívidas ($date)');
-
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro ao criar backup: $e")));
     }
   }
 
-  // Função para IMPORTAR (Restaurar)
-  Future<void> importarBanco(BuildContext context, Function onSucesso) async {
+  // --- IMPORTAR (Restaura o arquivo) ---
+  Future<void> importarBanco(BuildContext context, VoidCallback onSuccess) async {
     try {
-      // 1. Abre a janela para você escolher o arquivo
       FilePickerResult? result = await FilePicker.platform.pickFiles();
 
       if (result != null) {
         File file = File(result.files.single.path!);
 
-        // Confirmação de Segurança
-        bool confirmar = await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text("Cuidado!"),
-            content: Text("Isso vai APAGAR todos os dados atuais e substituir pelo backup. Tem certeza?"),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text("Cancelar")),
-              TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text("SIM, Restaurar", style: TextStyle(color: Colors.red))),
-            ],
-          ),
-        ) ?? false;
+        var databasesPath = await getDatabasesPath();
+        String dbPath = join(databasesPath, NOME_INTERNO);
 
-        if (confirmar) {
-          // 2. Fecha o banco atual para não dar erro
-          await DBHelper().close();
+        // Fecha conexão antes de substituir o arquivo (evita corrupção)
+        await DBHelper().close();
 
-          // 3. Substitui o arquivo velho pelo novo
-          String dbPath = join(await getDatabasesPath(), 'app_dividas_v3.db');
-          await file.copy(dbPath);
+        await file.copy(dbPath);
 
-          // 4. Avisa que deu certo
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Dados restaurados com sucesso!")));
+        await _atualizarDataBackup();
 
-          // Chama a função para recarregar a tela
-          onSucesso();
-        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Backup restaurado com sucesso!")));
+        onSuccess(); // Atualiza a tela
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro ao restaurar: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro ao restaurar backup: $e")));
     }
   }
 }
