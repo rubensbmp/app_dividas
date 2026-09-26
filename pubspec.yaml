@@ -21,7 +21,10 @@ dependencies:
   pdf: ^3.10.4
   printing: ^5.11.0
   brasil_fields: ^1.15.0
-  flutter_contacts: ^1.1.9
+  # Cópia local da 1.1.9+2 com correção no iOS (crash no boot com UIScene).
+  # Código Dart e Android idênticos ao pacote original.
+  flutter_contacts:
+    path: packages/flutter_contacts
   shared_preferences: ^2.2.2
 
   # --- NOVAS DEPENDÊNCIAS PARA NOTIFICAÇÃO ---

@@ -13,13 +13,15 @@ class NotificationService {
   Future<void> init() async {
     // Inicializa Timezone (necessário para agendamento)
     tz.initializeTimeZones();
+    // Todos os agendamentos (TZDateTime com tz.local) usam o horário de Brasília
+    tz.setLocalLocation(tz.getLocation('America/Sao_Paulo'));
 
     // Configuração Android (Ícone padrão do sistema)
     // Certifique-se de ter um ícone chamado 'app_icon' ou use '@mipmap/ic_launcher'
     const AndroidInitializationSettings initializationSettingsAndroid =
     AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    // Configuração iOS (Permissões básicas)
+    // Configuração iOS: pede permissão de alerta, som e badge na inicialização
     const DarwinInitializationSettings initializationSettingsDarwin =
     DarwinInitializationSettings(
       requestSoundPermission: true,
@@ -46,8 +48,17 @@ class NotificationService {
       priority: Priority.high,
     );
 
-    const NotificationDetails platformChannelSpecifics =
-    NotificationDetails(android: androidPlatformChannelSpecifics);
+    const DarwinNotificationDetails iosPlatformChannelSpecifics =
+    DarwinNotificationDetails(
+      presentAlert: true,
+      presentSound: true,
+      presentBadge: true,
+    );
+
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+      iOS: iosPlatformChannelSpecifics,
+    );
 
     await flutterLocalNotificationsPlugin.show(
       id,

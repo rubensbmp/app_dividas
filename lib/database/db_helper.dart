@@ -10,6 +10,10 @@ class DBHelper {
 
   DBHelper._internal();
 
+  // Nome e versão do banco em uso (o BackupService exporta/importa este mesmo arquivo)
+  static const String NOME_BANCO = 'faca_bainha_v4.db';
+  static const int VERSAO_BANCO = 4;
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB();
@@ -17,12 +21,16 @@ class DBHelper {
   }
 
   Future<Database> _initDB() async {
-    String path = join(await getDatabasesPath(), 'faca_bainha_v4.db'); // Mantendo a versão do seu banco
+    String path = join(await getDatabasesPath(), NOME_BANCO);
     return await openDatabase(
       path,
-      version: 4,
+      version: VERSAO_BANCO,
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) await _criarTabelaAnotacoes(db);
+        if (oldVersion < 2) {
+          // _criarTabelaAnotacoes já cria nivel_prioridade e ordem; os ALTER abaixo dariam "duplicate column"
+          await _criarTabelaAnotacoes(db);
+          return;
+        }
         if (oldVersion < 3) await db.execute('ALTER TABLE anotacoes ADD COLUMN nivel_prioridade INTEGER DEFAULT 0');
         if (oldVersion < 4) await db.execute('ALTER TABLE anotacoes ADD COLUMN ordem INTEGER DEFAULT 0');
       },

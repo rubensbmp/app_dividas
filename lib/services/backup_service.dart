@@ -11,8 +11,8 @@ import '../database/db_helper.dart';
 class BackupService {
 
   static const String KEY_ULTIMO_BACKUP = 'data_ultimo_backup';
-  // IMPORTANTE: Nome interno do arquivo no celular (não muda para não perder dados)
-  static const String NOME_INTERNO = 'faca_bainha_v3.db';
+  // IMPORTANTE: precisa ser o mesmo arquivo que o DBHelper abre
+  static const String NOME_INTERNO = DBHelper.NOME_BANCO;
 
   // Verifica se já passaram 7 dias desde o último backup
   Future<bool> precisaFazerBackup() async {
@@ -49,6 +49,9 @@ class BackupService {
       File dbFile = File(pathOriginal);
 
       if (await dbFile.exists()) {
+        // Fecha a conexão para gravar tudo no arquivo antes de copiar
+        await DBHelper().close();
+
         // Faz uma cópia temporária com o nome bonito
         await dbFile.copy(pathExportacao);
 
@@ -68,6 +71,33 @@ class BackupService {
     }
   }
 
+  // Confere se o arquivo é um banco deste app numa versão que o DBHelper sabe migrar.
+  // Retorna a mensagem de erro, ou null se estiver tudo certo.
+  Future<String?> _validarBackup(String path) async {
+    Database? db;
+    try {
+      db = await openDatabase(path, readOnly: true, singleInstance: false);
+      final versao = await db.getVersion();
+      final tabelas = (await db.query('sqlite_master', columns: ['name'], where: "type = 'table'"))
+          .map((t) => t['name'])
+          .toSet();
+      if (!tabelas.contains('pessoas') || !tabelas.contains('transacoes')) {
+        return "Este arquivo não é um backup do Controle de Dívidas.";
+      }
+      if (versao < 2) {
+        return "Este backup é de uma versão antiga do app e não pode ser restaurado. Gere um backup novo.";
+      }
+      if (versao > DBHelper.VERSAO_BANCO) {
+        return "Este backup é de uma versão mais nova do app. Atualize o app antes de restaurar.";
+      }
+      return null;
+    } catch (e) {
+      return "Arquivo de backup inválido.";
+    } finally {
+      await db?.close();
+    }
+  }
+
   // --- IMPORTAR (Restaura o arquivo) ---
   Future<void> importarBanco(BuildContext context, VoidCallback onSuccess) async {
     try {
@@ -76,11 +106,23 @@ class BackupService {
       if (result != null) {
         File file = File(result.files.single.path!);
 
+        final erro = await _validarBackup(file.path);
+        if (erro != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(erro)));
+          return;
+        }
+
         var databasesPath = await getDatabasesPath();
         String dbPath = join(databasesPath, NOME_INTERNO);
 
         // Fecha conexão antes de substituir o arquivo (evita corrupção)
         await DBHelper().close();
+
+        // Remove journal/WAL do banco antigo para não serem aplicados sobre o backup
+        for (final sufixo in ['-journal', '-wal', '-shm']) {
+          final extra = File('$dbPath$sufixo');
+          if (await extra.exists()) await extra.delete();
+        }
 
         await file.copy(dbPath);
 
