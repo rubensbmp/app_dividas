@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../database/db_helper.dart';
+import '../utils/share_origin.dart';
 
 class PersonDetailsScreen extends StatefulWidget {
   final int pessoaId;
@@ -206,13 +207,14 @@ class _PersonDetailsScreenState extends State<PersonDetailsScreen> with SingleTi
         await Share.shareXFiles(
           [XFile(file.path)],
           text: legenda,
+          sharePositionOrigin: origemCompartilhamento(),
         );
       } else {
         // MODO SÓ TEXTO (Abre direto o contato do WhatsApp)
         String telefone = _telefoneController.text.replaceAll(RegExp(r'[^\d]'), '');
 
         if (telefone.isEmpty) {
-          await Share.share(legenda);
+          await Share.share(legenda, sharePositionOrigin: origemCompartilhamento());
         } else {
           if (telefone.length <= 11) telefone = "55$telefone";
 
@@ -221,7 +223,7 @@ class _PersonDetailsScreenState extends State<PersonDetailsScreen> with SingleTi
           if (await canLaunchUrl(whatsappUrl)) {
             await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
           } else {
-            await Share.share(legenda);
+            await Share.share(legenda, sharePositionOrigin: origemCompartilhamento());
           }
         }
       }

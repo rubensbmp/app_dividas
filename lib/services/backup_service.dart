@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../database/db_helper.dart';
+import '../utils/share_origin.dart';
 
 class BackupService {
 
@@ -58,7 +59,8 @@ class BackupService {
         // Abre o compartilhamento nativo
         await Share.shareXFiles(
             [XFile(pathExportacao)],
-            text: 'Backup Controle de Dívidas ($dataHoje)'
+            text: 'Backup Controle de Dívidas ($dataHoje)',
+            sharePositionOrigin: origemCompartilhamento(),
         );
 
         await _atualizarDataBackup(); // Reseta o contador de 7 dias
